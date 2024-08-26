@@ -5,7 +5,7 @@ import pandas as pd
 st.set_page_config(page_title="My Streamlit App")
 
 # Add a title
-st.title("Welcome to My Streamlit App!")
+st.title("Welcome to My Streamlit App 😁!")
 
 # Add a subheader
 st.subheader("This is a subheader")

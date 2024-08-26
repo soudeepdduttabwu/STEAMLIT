@@ -57,13 +57,13 @@ st.title("Welcome to Salesforce Dashboard")
 
 st.sidebar.title("Menu")
 
-menu_options = ["Dashboard", "Visit History", "Leave Management", "Notice", "Logout"]
+menu_options = ["Dashboard", "Visit History", "Attendance History", "Notice", "Logout"]
 
 menu_selection = st.sidebar.radio("Go to", menu_options)
 
-if menu_selection == "Leave Management":
-    st.header("Leave Management")
-    st.write("This is the leave management page.")
+if menu_selection == "Attendance History":
+    st.header("Attendance History")
+    st.write("This is the Attendance History page.")
     
     # Create date filters
     today = datetime.today().date()
@@ -72,37 +72,29 @@ if menu_selection == "Leave Management":
     # Add custom date filter
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Start date", value=today)
+        start_date = st.date_input("📅Start date📅", value=today)
     with col2:
-        end_date = st.date_input("End date", value=today)
+        end_date = st.date_input("📅End date📅", value=today)
 
     # Add "Today" and "Yesterday" shortcuts in one line
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Today"):
+        if st.button("📅Today📅"):
             start_date = today
             end_date = today
     with col2:
-        if st.button("Yesterday"):
+        if st.button("📅Yesterday📅"):
             start_date = yesterday
             end_date = yesterday
     
     # Display selected dates
     st.write(f"Selected date range: {start_date} to {end_date}")
-
+    
     # Run the attendance query with the selected dates
     data = run_attendance_query(start_date, end_date)
-
-    # Display a customized header based on the selected dates
-    if data is not None:
-        st.subheader(f"Attendance Records from {start_date} to {end_date}")
-
-        # Display the result in a table format
-        if not data.empty:
-            st.write(data)
-        else:
-            st.write("No records found for the selected date range.")
+    
+    # Display the result in a table format
+    if data is not None and not data.empty:
+        st.write(data)
     else:
-        st.write("No data available.")
-
-# Additional menu sections can be added here...
+        st.write("No records found for the selected date range.")
