@@ -1,4 +1,4 @@
-SELECT 
+SELECT attendance.user_id,
     users.name AS Name ,
     attendance.clockin_time AS Entry_time ,
     attendance.clockin_address AS Entry_Address ,
