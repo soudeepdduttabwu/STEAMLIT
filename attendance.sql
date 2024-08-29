@@ -1,10 +1,11 @@
-SELECT attendance.user_id,
+SELECT 
+    attendance.date,
     users.name AS Name ,
     attendance.clockin_time AS Entry_time ,
     attendance.clockin_address AS Entry_Address ,
     attendance.clockout_time AS Exit_time,
-    attendance.clockout_address AS Exit_Address,
-    attendance.date
+    attendance.clockout_address AS Exit_Address
+    
 FROM 
     git.attendance
 JOIN 

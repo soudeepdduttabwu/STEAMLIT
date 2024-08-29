@@ -7,6 +7,10 @@ import os
 from datetime import datetime, timedelta
 from sqlalchemy import text
 import sqlalchemy
+import logging
+logging.basicConfig()
+logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+
 # Load environment variables from the .env file
 load_dotenv()
 # Database connection settings
@@ -43,15 +47,22 @@ def run_query(sql_file, start_date=None, end_date=None):
         engine = create_connection()
         if engine:
             data = fetch_data(query, engine)
-            if data is not None and sql_file == "Leave_reson.sql":
-                # Replace leave_status values with labels
-                data['leave_status'] = data['leave_status'].map({0: 'Pending', 1: 'Approved', 2: 'Rejected'})
+            if data is not None:
+                if sql_file == "Leave_reson.sql":
+                    # Replace leave_status values with labels
+                    data['leave_status'] = data['leave_status'].map({0: 'Pending', 1: 'Approved', 2: 'Rejected'})
+                elif sql_file == "emp_time_spent.sql":
+                    # Replace leave_status values with label
+                    # Add the missing code here
+                    pass
             return data
         else:
             return None
     except FileNotFoundError:
         st.error(f"{sql_file} file not found.")
         return None
+          
+            
 # Streamlit app
 st.set_page_config(page_title="Salesforce", layout="wide")
 # Main Leave Management page
@@ -88,32 +99,73 @@ if menu_selection == "Leave Management":
     st.write(f"Selected date range: {start_date} to {end_date}")
 
     # Attendance History section
+    #st.subheader("Attendance History")
+    attendance_data = run_query("attendance.sql", start_date, end_date)
     st.subheader("Attendance History")
     attendance_data = run_query("attendance.sql", start_date, end_date)
     if attendance_data is not None:
-        st.write(attendance_data)
+        # Rename columns to display custom names
+        attendance_data = attendance_data.rename(columns={
+                'date': 'Date',
+                'Name': 'Name',
+                'Entry_time': 'Entry time',
+                'Entry_Address': 'Entry Address',
+                'Exit_time': 'Exit time',
+                'Exit_Address': 'Exit Address'
+            })
+        display_cols = ['Date', 'Name', 'Entry time', 'Entry Address', 'Exit time', 'Exit Address']
+        st.write(attendance_data[display_cols])
     else:
         st.write("No attendance records found.")
 
-    # Leave History section
+    
     # Leave History section
     st.subheader("Leave History")
     leave_data = run_query("Leave_reson.sql", start_date, end_date)
     if leave_data is not None:
-        st.write(leave_data)
+
+    # Rename columns to display custom names
+        leave_data = leave_data.rename(columns={
+            'user_name': 'Employee Name',
+            'Leave_mark_Date': 'Leave Date',
+            'start_date': 'Start Date',
+            'end_date': 'End Date',
+            'reason': 'Reason',
+            'leave_status': 'Leave Status'
+        })
+        display_cols = ['Employee Name', 'Leave Date', 'Start Date', 'End Date', 'Reason', 'Leave Status']
+        st.write(leave_data[display_cols])
+        #st.write(leave_data)
         # Add a dropdown to update leave status
         leave_status_options = ["Pending", "Approved", "Rejected"]
-        leave_status_selected = st.selectbox("Update Leave Status", leave_status_options)
-        if leave_status_selected:
+        user_name_list = leave_data['Employee Name'].tolist()  # Get the list of employee names
+        selected_user_name = st.selectbox("Select Employee to Update", user_name_list)
+        selected_leave_status = st.selectbox("Update Leave Status", leave_status_options)
+        if st.button("Update Leave Status"):
+            # Get the leave ID corresponding to the selected employee name
+            selected_leave_id = leave_data.loc[leave_data['Employee Name'] == selected_user_name, 'leave_id'].iloc[0]
             # Update leave status in database
             from sqlalchemy import bindparam
-            update_query = text("UPDATE Leave_reason SET status = :status WHERE id = :id")
+            update_query = text("UPDATE git.Leave_reason SET `status` =:status WHERE `id` =:id")
             params = {
-                "status": {"Pending": 0, "Approved": 1, "Rejected": 2}[leave_status_selected],
-                "id": leave_data.iloc[0]['leave_id']  # Assuming the column name is 'leave_id'
+                "status": {"Pending": 0, "Approved": 1, "Rejected": 2}[selected_leave_status],
+                "id": selected_leave_id
             }
-        update_query = update_query.bindparams(bindparam("id", params["id"]))
-        conn.execute(update_query, params)
-            
+            #st.write(f"Update query: {update_query} with params {params}")
+            engine = create_connection()
+            #if engine:
+               # st.write("Database connection established successfully!")
+            conn = engine.connect()
+            try:
+                conn.execute(update_query, params)
+                conn.commit()  # Commit the changes
+                conn.close()
+                st.success("Leave status updated successfully!")
+            except sqlalchemy.exc.DBAPIError as e:
+                st.error(f"Error updating leave status: {e}")
+# user time spent 
 
-            
+    st.header("User Time Spent")
+    st.subheader("View time spent by employees")
+
+    user_time_spent_data = run_query("emp_time_spent.sql", start_date, end_date)
