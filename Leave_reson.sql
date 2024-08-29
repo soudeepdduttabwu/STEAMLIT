@@ -1,5 +1,6 @@
 SELECT 
- u1.name AS user_name,
+leave_reason.id as leave_id,
+u1.name AS user_name,
 DATE(leave_reason.created_at) AS Leave_mark_Date,
 leave_reason.date1 AS start_date,
 leave_reason.date2 AS end_date,
