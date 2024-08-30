@@ -10,7 +10,7 @@ import sqlalchemy
 import logging
 logging.basicConfig()
 logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
-
+import altair as alt
 # Load environment variables from the .env file
 load_dotenv()
 # Database connection settings
@@ -169,3 +169,39 @@ if menu_selection == "Leave Management":
     st.subheader("View time spent by employees")
 
     user_time_spent_data = run_query("emp_time_spent.sql", start_date, end_date)
+    if user_time_spent_data is not None:
+        # Rename columns to display custom names
+        user_time_spent_data = user_time_spent_data.rename(columns={
+            'name': 'Employee Name',
+            'date':'DATE',
+            'ENTRY_TIME':'Entry time',
+            'EXIT_TIME':'Exit time',
+            'TOTAL_TIME_SPENT':'Total time'
+            })
+        # Display the data
+        display_cols1 = ['Employee Name', 'DATE', 'Total time']
+        st.write(user_time_spent_data[display_cols1])
+        
+        # Convert 'Total time' to minutes.seconds format
+        user_time_spent_data['Total time (min.sec)'] = user_time_spent_data['Total time'].apply(
+            lambda x: x.total_seconds() / 60 if pd.notna(x) else 0  # Convert to minutes
+        )
+        
+        # Pivot the data to have dates as columns and employee names as rows
+        pivot_data = user_time_spent_data.pivot_table(
+            index='Employee Name',
+            columns='DATE',
+            values='Total time (min.sec)',
+            aggfunc='sum'
+        ).fillna(0)  # Fill NaN values with 0
+        
+        # Transpose the data to have dates on the x-axis
+       # pivot_data1 = pivot_data.T
+        
+        # Display the pivoted data (optional)
+        st.write(pivot_data)
+        
+        # Create a bar chart
+        st.bar_chart(pivot_data)
+    else:
+        st.write("No data found")

@@ -5,10 +5,15 @@ from mysql.connector import Error
 from dotenv import load_dotenv
 import os
 from datetime import datetime, timedelta
+from sqlalchemy import text
 import sqlalchemy
+import logging
+logging.basicConfig()
+logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+import altair as alt
 # Load environment variables from the .env file
 load_dotenv()
-# Function to create a database connection using SQLAlchemy
+# Database connection settings
 def create_connection():
     try:
         user = os.getenv('USER')
@@ -16,11 +21,6 @@ def create_connection():
         host = os.getenv('HOST')
         port = os.getenv('PORT')
         database = os.getenv('DATABASE')
-
-        if not all([user, password, host, port, database]):
-            st.error("One or more environment variables are not set.")
-            return None
-
         engine = sqlalchemy.create_engine(
             f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
         )
@@ -36,166 +36,172 @@ def fetch_data(query, engine):
     except Exception as e:
         st.error(f"Error fetching data: {e}")
         return None
-
-# Function to run the attendance SQL query (assuming it retrieves all records)
-def run_attendance_query(start_date=None, end_date=None):
+# Function to run SQL queries
+def run_query(sql_file, start_date=None, end_date=None):
     try:
-        with open("attendance.sql", "r") as file:
+        with open(sql_file, "r") as file:
             query = file.read()
 
-        # Modify the query to include start_date and end_date if provided
         if start_date and end_date:
             query = query.format(start_date=start_date, end_date=end_date)
-
         engine = create_connection()
         if engine:
             data = fetch_data(query, engine)
+            if data is not None:
+                if sql_file == "Leave_reson.sql":
+                    # Replace leave_status values with labels
+                    data['leave_status'] = data['leave_status'].map({0: 'Pending', 1: 'Approved', 2: 'Rejected'})
+                elif sql_file == "emp_time_spent.sql":
+                    # Replace leave_status values with label
+                    # Add the missing code here
+                    pass
             return data
         else:
             return None
     except FileNotFoundError:
-        st.error("attendance.sql file not found.")
+        st.error(f"{sql_file} file not found.")
         return None
-
-# Function to fetch detailed employee records from the attendance_view.sql file
-def fetch_detailed_employee_data(user_id, start_date=None, end_date=None):
-    try:
-        with open("attendance_view.sql", "r") as file:
-            query = file.read()
-
-        # Replace the placeholder with the actual user_id
-        query = query.format(user_id=user_id)
-
-        if start_date and end_date:
-            query = query.format(start_date=start_date, end_date=end_date)
-
-        engine = create_connection()
-        if engine:
-            data = fetch_data(query, engine)
-            return data
-        else:
-            return None
-    except FileNotFoundError:
-        st.error("attendance_view.sql file not found.")
-        return None
-# Function to fetch detailed employee records from the absent_histoery.sql file
-def run_Leave_reson_sql(start_date=None, end_date=None):
-    try:
-        with open("Leave_reson.sql", "r") as file:
-            query = file.read()
-
-        # Modify the query to include start_date and end_date if provided
-        if start_date and end_date:
-            query = query.format(start_date=start_date, end_date=end_date)
-
-        engine = create_connection()
-        if engine:
-            data = fetch_data(query, engine)
-            return data
-        else:
-            return None
-    except FileNotFoundError:
-        st.error("absent_history.sql file not found.")
-        return None
+          
+            
 # Streamlit app
 st.set_page_config(page_title="Salesforce", layout="wide")
+# Main Leave Management page
+st.title("Welcome to Salesforce Dashboard")
+st.sidebar.title("Menu")
+menu_options = ["Dashboard", "Visit History", "Leave Management", "Notice", "Logout"]
+menu_selection = st.sidebar.radio("Go to", menu_options)
+if menu_selection == "Leave Management":
+    st.header("Leave Management")
 
-# Retrieve query parameters
-query_params = st.query_params
-user_id = query_params.get("user_id", [None])[0]
+    # Create date filters
+    today = datetime.today().date()
+    yesterday = today - timedelta(days=1)
 
-if user_id:
-    # Get start_date and end_date from the query parameters
-    start_date = query_params.get("start_date1", [None])[0]
-    end_date = query_params.get("end_date1", [None])[0]
-    #st.title("Employee Details")
-    if st.button("View Details", key="view_details_button", disabled=not (start_date and end_date)):
-        # Fetch attendance data for the selected employee
-        attendance_data = run_attendance_query(start_date, end_date)
+    # Add custom date filter
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("Start date", value=today)
+    with col2:
+        end_date = st.date_input("End date", value=today)
 
-        if attendance_data is not None:
-            st.write(attendance_data)
+    # Add "Today" and "Yesterday" shortcuts in one line
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Today"):
+            start_date = today
+            end_date = today
+    with col2:
+        if st.button("Yesterday"):
+            start_date = yesterday
+            end_date = yesterday
 
-            # Add "View Details" button
-    # if st.button("View Details", key="view_details_button", disabled=not (start_date and end_date)):
-    #     if user_id:  # Check if user_id is available
-    #         detailed_user_data = fetch_detailed_employee_data(user_id, start_date, end_date)
-    #         if detailed_user_data is not None:
-    #             st.write(detailed_user_data)
-    #         else:
-    #             st.error("No detailed data found.")
-    #     else:
-    #         st.error("No user selected.")
+    # Display selected dates
+    st.write(f"Selected date range: {start_date} to {end_date}")
 
-    #     # Add a button to go back to the main Leave Management page
-    #     if st.button("Back to Leave Management"):
-    #         st.query_params.clear()  # Clear query parameters to return to the main page
+    # Attendance History section
+    #st.subheader("Attendance History")
+    attendance_data = run_query("attendance.sql", start_date, end_date)
+    st.subheader("Attendance History")
+    attendance_data = run_query("attendance.sql", start_date, end_date)
+    if attendance_data is not None:
+        # Rename columns to display custom names
+        attendance_data = attendance_data.rename(columns={
+                'date': 'Date',
+                'Name': 'Name',
+                'Entry_time': 'Entry time',
+                'Entry_Address': 'Entry Address',
+                'Exit_time': 'Exit time',
+                'Exit_Address': 'Exit Address'
+            })
+        display_cols = ['Date', 'Name', 'Entry time', 'Entry Address', 'Exit time', 'Exit Address']
+        st.write(attendance_data[display_cols])
+    else:
+        st.write("No attendance records found.")
 
-else:
-    # Main Leave Management page
-    st.title("Welcome to Salesforce Dashboard")
-    st.sidebar.title("Menu")
-    menu_options = ["Dashboard", "Visit History", "Leave Management", "Notice", "Logout"]
-    menu_selection = st.sidebar.radio("Go to", menu_options)
+    
+    # Leave History section
+    st.subheader("Leave History")
+    leave_data = run_query("Leave_reson.sql", start_date, end_date)
+    if leave_data is not None:
 
-    if menu_selection == "Leave Management":
-        st.header("Leave Management")
-        #st.write("This is the leave management page.")
+    # Rename columns to display custom names
+        leave_data = leave_data.rename(columns={
+            'user_name': 'Employee Name',
+            'Leave_mark_Date': 'Leave Date',
+            'start_date': 'Start Date',
+            'end_date': 'End Date',
+            'reason': 'Reason',
+            'leave_status': 'Leave Status'
+        })
+        display_cols = ['Employee Name', 'Leave Date', 'Start Date', 'End Date', 'Reason', 'Leave Status']
+        st.write(leave_data[display_cols])
+        #st.write(leave_data)
+        # Add a dropdown to update leave status
+        leave_status_options = ["Pending", "Approved", "Rejected"]
+        user_name_list = leave_data['Employee Name'].tolist()  # Get the list of employee names
+        selected_user_name = st.selectbox("Select Employee to Update", user_name_list)
+        selected_leave_status = st.selectbox("Update Leave Status", leave_status_options)
+        if st.button("Update Leave Status"):
+            # Get the leave ID corresponding to the selected employee name
+            selected_leave_id = leave_data.loc[leave_data['Employee Name'] == selected_user_name, 'leave_id'].iloc[0]
+            # Update leave status in database
+            from sqlalchemy import bindparam
+            update_query = text("UPDATE git.Leave_reason SET `status` =:status WHERE `id` =:id")
+            params = {
+                "status": {"Pending": 0, "Approved": 1, "Rejected": 2}[selected_leave_status],
+                "id": selected_leave_id
+            }
+            #st.write(f"Update query: {update_query} with params {params}")
+            engine = create_connection()
+            #if engine:
+               # st.write("Database connection established successfully!")
+            conn = engine.connect()
+            try:
+                conn.execute(update_query, params)
+                conn.commit()  # Commit the changes
+                conn.close()
+                st.success("Leave status updated successfully!")
+            except sqlalchemy.exc.DBAPIError as e:
+                st.error(f"Error updating leave status: {e}")
+# user time spent 
+
+    st.header("User Time Spent")
+    st.subheader("View time spent by employees")
+
+    user_time_spent_data = run_query("emp_time_spent.sql", start_date, end_date)
+    if user_time_spent_data is not None:
+        # Rename columns to display custom names
+        user_time_spent_data = user_time_spent_data.rename(columns={
+            'name': 'Employee Name',
+            'date':'DATE',
+            'ENTRY_TIME':'Entry time',
+            'EXIT_TIME':'Exit time',
+            'TOTAL_TIME_SPENT':'Total time'
+            })
+        # Display the data
+        display_cols1 = ['Employee Name', 'DATE', 'Total time']
+        st.write(user_time_spent_data[display_cols1])
         
-        # Create date filters
-        today = datetime.today().date()
-        yesterday = today - timedelta(days=1)
-
-        # Add custom date filter
-        col1, col2 = st.columns(2)
-        with col1:
-            start_date = st.date_input("Start date", value=today)
-        with col2:
-            end_date = st.date_input("End date", value=today)
-
-        # Add "Today" and "Yesterday" shortcuts in one line
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Today"):
-                start_date = today
-                end_date = today
-        with col2:
-            if st.button("Yesterday"):
-                start_date = yesterday
-                end_date = yesterday
-
-        # Display selected dates
-        st.write(f"Selected date range: {start_date} to {end_date}")
-        st.subheader("Attendance History")
-        # Run the attendance query with the selected dates
-        data = run_attendance_query(start_date, end_date)
+        # Convert 'Total time' to minutes.seconds format
+        user_time_spent_data['Total time (min.sec)'] = user_time_spent_data['Total time'].apply(
+            lambda x: x.total_seconds() / 60 if pd.notna(x) else 0  # Convert to minutes
+        )
         
-        if data is not None:
-            st.write(data)
-        else:
-            st.write("No attendance records found.")
-
-        #Absent history section(1)
-
-    #     st.subheader("Absent History")
-    #     if st.button("View Absent History", key="view_Absent_history_button"):
-    #         Absent_history_data = run_leave_history_query()
-
-    #         if Absent_history_data is not None:
-    #             st.write(Absent_history_data)
-
-    # # Add a button to go back to the main Leave Management page
-    # if st.button("Back to Absent Management"):
-    #     st.query_params.clear()   # Clear query parameters to return to the main page
-
-
-     # Absent history section(2)  
-        st.write(f"Selected date range: {start_date} to {end_date}")
-        st.subheader("leave History")
-        # Run the attendance query with the selected dates
-        data = run_Leave_reson_sql(start_date, end_date)
+        # Pivot the data to have dates as columns and employee names as rows
+        pivot_data = user_time_spent_data.pivot_table(
+            index='Employee Name',
+            columns='DATE',
+            values='Total time (min.sec)',
+            aggfunc='sum'
+        ).fillna(0)  # Fill NaN values with 0
         
-        if data is not None:
-            st.write(data)
-        else:
-            st.write("No leave records found.")
+        # Transpose the data to have dates on the x-axis
+       # pivot_data1 = pivot_data.T
+        
+        # Display the pivoted data (optional)
+        st.write(pivot_data)
+        
+        # Create a bar chart
+        st.bar_chart(pivot_data)
+    else:
+        st.write("No data found")
